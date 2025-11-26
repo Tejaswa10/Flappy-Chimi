@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Flappy-Chimi</title>
+<style>
+    body { margin: 0; overflow: hidden; font-family: Arial, sans-serif; background: #70c5ce; }
+    canvas { display: block; }
+    #overlay {
+        position: absolute;
+        top: 0; left: 0;
+        width: 100%; height: 100%;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        pointer-events: none;
+    }
+    .button {
+        background: #ffdd59;
+        padding: 15px 40px;
+        margin-top: 20px;
+        font-size: 2rem;
+        font-weight: bold;
+        color: #333;
+        border-radius: 15px;
+        box-shadow: 0 6px #c1b000;
+        cursor: pointer;
+        pointer-events: all;
+        transition: all 0.1s ease;
+    }
+    .button:active {
+        transform: translateY(4px);
+        box-shadow: 0 2px #c1b000;
+    }
+    .title {
+        font-size: 4rem;
+        color: #fff;
+        text-shadow: 2px 2px #000;
+    }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="overlay">
+    <div class="title" id="startTitle">Flappy-Chimi</div>
+    <div class="button" id="startBtn">Play</div>
+    <div class="button" id="retryBtn" style="display:none;">Retry</div>
+    <div class="title" id="scoreOverlay" style="display:none;"></div>
+</div>
+
+<script>
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+
+// --- Resize canvas ---
+function resize() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+}
+resize();
+window.addEventListener('resize', resize);
+
+// --- Game values ---
+const PIPE_WIDTH = 70;
+const PIPE_GAP = 250;
+const PIPE_SPEED = 3;
+const SPAWN_DISTANCE = 420;
+const BIRD_WIDTH = 70;
+const BIRD_HEIGHT = 80;
+const GRAVITY = 0.4;
+const JUMP = -9;
+const START_BIRD_X_RATIO = 0.2;
+
+// --- Images ---
+const birdImg = new Image();
+birdImg.src = "chimi.webp";
+
+const pipeImg = new Image();
+pipeImg.src = "tanish.webp";
+
+const bgImg = new Image();
+bgImg.src = "bg_chimi.jpg";
+
+// --- DOM elements ---
+const overlay = document.getElementById("overlay");
+const startBtn = document.getElementById("startBtn");
+const retryBtn = document.getElementById("retryBtn");
+const startTitle = document.getElementById("startTitle");
+const scoreOverlay = document.getElementById("scoreOverlay");
+
+// --- Game state ---
+let birdX, birdY, velocity, pipes, score, started, gameOver;
+
+// --- Reset ---
+function reset() {
+    birdX = canvas.width * START_BIRD_X_RATIO;
+    birdY = canvas.height * 0.4;
+    velocity = 0;
+    pipes = [];
+    gameOver = false;
+}
+
+// --- Pipe creation ---
+function createPipe() {
+    const maxTop = Math.max(60, canvas.height - PIPE_GAP - 60);
+    const topHeight = 60 + Math.random() * (maxTop - 60);
+    return { x: canvas.width, top: topHeight, bottom: topHeight + PIPE_GAP, passed: false };
+}
+
+// --- Game loop ---
+function gameLoop() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(bgImg, 0, 0, canvas.width, canvas.height);
+
+    if (!started) return;
+
+    velocity += GRAVITY;
+    birdY += velocity;
+
+    // draw bird
+    ctx.drawImage(birdImg, birdX - BIRD_WIDTH/2, birdY - BIRD_HEIGHT/2, BIRD_WIDTH, BIRD_HEIGHT);
+
+    // spawn pipe
+    if (pipes.length === 0 || (canvas.width - pipes[pipes.length - 1].x) >= SPAWN_DISTANCE) {
+        pipes.push(createPipe());
+    }
+
+    // draw pipes
+    for (let i = pipes.length - 1; i >= 0; i--) {
+        const p = pipes[i];
+        p.x -= PIPE_SPEED;
+        ctx.drawImage(pipeImg, p.x, 0, PIPE_WIDTH, p.top);
+        ctx.drawImage(pipeImg, p.x, p.bottom, PIPE_WIDTH, canvas.height - p.bottom);
+
+        const birdBox = { x: birdX - BIRD_WIDTH/2, y: birdY - BIRD_HEIGHT/2, width: BIRD_WIDTH, height: BIRD_HEIGHT };
+
+        if (
+            birdBox.x + birdBox.width > p.x &&
+            birdBox.x < p.x + PIPE_WIDTH &&
+            (birdBox.y < p.top || birdBox.y + birdBox.height > p.bottom)
+        ) {
+            endGame();
+            return;
+        }
+
+        if (!p.passed && (p.x + PIPE_WIDTH) < birdX) {
+            p.passed = true;
+            score++;
+        }
+
+        if (p.x + PIPE_WIDTH < -50) pipes.splice(i,1);
+    }
+
+    // out-of-bounds
+    if (birdY + BIRD_HEIGHT/2 > canvas.height || birdY - BIRD_HEIGHT/2 < 0) {
+        endGame();
+        return;
+    }
+
+    // draw score
+    ctx.fillStyle = "white";
+    ctx.font = Math.round(Math.max(40, canvas.width * 0.06)) + "px Arial";
+    ctx.textBaseline = "top";
+    ctx.fillText(score, 16, 16);
+
+    requestAnimationFrame(gameLoop);
+}
+
+// --- End game ---
+function endGame() {
+    started = false;
+    gameOver = true;
+    scoreOverlay.innerText = score;
+    scoreOverlay.style.display = "block";
+    retryBtn.style.display = "block";
+}
+
+// --- Controls ---
+function flap() { if (started) velocity = JUMP; }
+window.addEventListener("touchstart", e=>{e.preventDefault(); flap();},{passive:false});
+window.addEventListener("mousedown", flap);
+window.addEventListener("keydown", e=>{ if(e.code==="Space") flap(); });
+
+// --- Start button ---
+startBtn.addEventListener("click", () => {
+    startBtn.style.display = "none";
+    startTitle.style.display = "none";
+    scoreOverlay.style.display = "none";
+    retryBtn.style.display = "none";
+    started = true;
+    score = 0;
+    reset();
+    requestAnimationFrame(gameLoop);
+});
+
+// --- Retry button ---
+retryBtn.addEventListener("click", () => {
+    retryBtn.style.display = "none";
+    scoreOverlay.style.display = "none";
+    started = true;
+    reset();
+    requestAnimationFrame(gameLoop);
+});
+
+// --- Start game after images load ---
+let imagesLoaded = 0;
+[birdImg, pipeImg, bgImg].forEach(img=>{
+    img.onload = ()=>{
+        imagesLoaded++;
+        if(imagesLoaded===3) overlay.style.pointerEvents="all";
+    }
+});
+</script>
+</body>
+</html>
